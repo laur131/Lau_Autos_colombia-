@@ -90,6 +90,16 @@
           (click)="setView('historial')">
           ▤ &nbsp; Historial
         </button>
+
+        @if (isAdmin) {
+          <button [class.active]="view === 'cuentas'" (click)="setView('cuentas')">
+            ♙ &nbsp; Usuarios y cuentas
+          </button>
+          <button [class.active]="view === 'celdas'" (click)="setView('celdas')">
+            ▦ &nbsp; Administración de celdas
+          </button>
+        }
+
       </nav>
 
       <div class="side-foot">
@@ -392,6 +402,143 @@
                       No hay movimientos para estos filtros.
                     </td>
                   </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      @if (view === 'cuentas' && isAdmin) {
+        <section class="panel wide">
+          <div class="heading">
+            <div>
+              <span class="eyebrow">ADMINISTRACIÓN</span>
+              <h2>Usuarios y credenciales</h2>
+              <p>Crea cuentas de administrador u operario y controla su acceso.</p>
+            </div>
+          </div>
+
+          <form class="admin-form" (ngSubmit)="createAccount()">
+            <div class="admin-grid">
+              <div>
+                <label for="account-document">Documento</label>
+                <input id="account-document" name="accountDocument" [(ngModel)]="accountDocument" required minlength="5" maxlength="20">
+              </div>
+              <div>
+                <label for="account-names">Nombres</label>
+                <input id="account-names" name="accountNames" [(ngModel)]="accountNames" required minlength="2" maxlength="100">
+              </div>
+              <div>
+                <label for="account-lastnames">Apellidos</label>
+                <input id="account-lastnames" name="accountLastNames" [(ngModel)]="accountLastNames" required minlength="2" maxlength="100">
+              </div>
+              <div>
+                <label for="account-username">Nombre de usuario</label>
+                <input id="account-username" name="accountUsername" [(ngModel)]="accountUsername" required minlength="3" maxlength="50">
+              </div>
+              <div>
+                <label for="account-password">Contraseña inicial</label>
+                <input id="account-password" name="accountPassword" type="password" [(ngModel)]="accountPassword" required minlength="8" maxlength="128">
+              </div>
+              <div>
+                <label for="account-role">Rol y permisos</label>
+                <select id="account-role" name="accountRole" [(ngModel)]="accountRole">
+                  <option value="OPERARIO">Operario</option>
+                  <option value="ADMIN">Administrador</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="primary" type="submit" [disabled]="busy">Crear cuenta</button>
+            </div>
+          </form>
+
+          <h3 class="subheading">Cuentas registradas</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Documento</th><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Acción</th></tr></thead>
+              <tbody>
+                @for (user of managedUsers; track user.usuario_id) {
+                  <tr>
+                    <td>{{ user.documento }}</td>
+                    <td>{{ user.nombres }} {{ user.apellidos }}</td>
+                    <td>{{ user.username || 'Sin credenciales' }}</td>
+                    <td>{{ user.rol }}</td>
+                    <td>{{ user.activo === 1 ? 'Activo' : 'Inactivo' }}</td>
+                    <td>
+                      @if (user.usuario_id !== currentUser?.usuario_id) {
+                        <button class="secondary small-action" type="button" (click)="toggleUser(user)">
+                          {{ user.activo === 1 ? 'Desactivar' : 'Activar' }}
+                        </button>
+                      } @else { <span>Sesión actual</span> }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="empty">No hay cuentas registradas.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="helper">Las contraseñas se almacenan mediante hash y nunca se muestran en este listado.</p>
+        </section>
+      }
+
+      @if (view === 'celdas' && isAdmin) {
+        <section class="panel wide">
+          <div class="heading">
+            <div>
+              <span class="eyebrow">INVENTARIO INDIVIDUAL</span>
+              <h2>Administración de celdas</h2>
+              <p>Registra cada espacio y controla su disponibilidad.</p>
+            </div>
+          </div>
+
+          <form class="admin-form" (ngSubmit)="createCell()">
+            <div class="admin-grid">
+              <div>
+                <label for="cell-code">Código de celda</label>
+                <input id="cell-code" name="cellCode" [(ngModel)]="cellCode" placeholder="Ej. C-71" required minlength="2" maxlength="20">
+              </div>
+              <div>
+                <label for="cell-type">Tipo de vehículo</label>
+                <select id="cell-type" name="cellType" [(ngModel)]="cellType">
+                  <option value="CARRO">Carro</option>
+                  <option value="MOTOCICLETA">Motocicleta</option>
+                </select>
+              </div>
+              <div>
+                <label for="cell-location">Ubicación</label>
+                <input id="cell-location" name="cellLocation" [(ngModel)]="cellLocation" required maxlength="100">
+              </div>
+            </div>
+            <div class="actions">
+              <button class="primary" type="submit" [disabled]="busy || !cellCode.trim()">Crear celda individual</button>
+            </div>
+          </form>
+
+          <h3 class="subheading">Celdas registradas</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Código</th><th>Tipo</th><th>Ubicación</th><th>Estado</th><th>Activa</th><th>Acción</th></tr></thead>
+              <tbody>
+                @for (cell of parkingCells; track cell.celda_id) {
+                  <tr>
+                    <td><b>{{ cell.codigo }}</b></td>
+                    <td>{{ cell.tipo_vehiculo === 'CARRO' ? 'Carro' : 'Motocicleta' }}</td>
+                    <td>{{ cell.ubicacion }}</td>
+                    <td>{{ cell.estado }}</td>
+                    <td>{{ cell.activa === 1 ? 'Sí' : 'No' }}</td>
+                    <td>
+                      @if (cell.activa === 1 && cell.estado !== 'OCUPADA') {
+                        <button class="secondary small-action" type="button" (click)="toggleCellMaintenance(cell)">
+                          {{ cell.estado === 'MANTENIMIENTO' ? 'Habilitar' : 'Enviar a mantenimiento' }}
+                        </button>
+                      } @else { <span>No disponible</span> }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="empty">No hay celdas registradas.</td></tr>
                 }
               </tbody>
             </table>
