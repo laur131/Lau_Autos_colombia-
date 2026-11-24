@@ -1,9 +1,0 @@
-KIT DE CORRECCIÓN AUTOS COLOMBIA
-
-1. Abre GUIA_DE_CORRECCION.md. Contiene el diagnóstico, orden de trabajo y criterios de aceptación.
-2. Usa MAPA_DE_ARCHIVOS.md para localizar cada cambio.
-3. Usa CHECKLIST_FINAL.md para verificar que nada quede pendiente.
-
-Este kit está basado en la lectura del repositorio conectado. No contiene una sustitución integral del backend ni afirma que las pruebas hayan pasado. No apliques el ZIP previo de backend: podía omitir routers y cambiar el esquema sin comprobar la base de datos.
-
-El siguiente paso técnico correcto es cotejar el esquema SQLite real y completar los cambios por etapas, conservando las tablas y funcionalidades existentes.
