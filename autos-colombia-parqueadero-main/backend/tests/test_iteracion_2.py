@@ -1,34 +1,85 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
+
 from app.main import app, seed_initial_data
+from app.routers.auth import ACTIVE_SESSIONS
 
-seed_initial_data()
-client = TestClient(app)
 
-def test_flujo_completo_iteracion_2():
-    # 1. Login Administrador
-    res_admin = client.post("/api/v1/auth/login", json={"username": "admin", "password": "Admin2026*"})
-    assert res_admin.status_code == 200
-    token_admin = res_admin.json()["access_token"]
-    headers_admin = {"Authorization": f"Bearer {token_admin}"}
+def login(client, username="admin", password="Admin2026*"):
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
-    # 2. Login Operario
-    res_oper = client.post("/api/v1/auth/login", json={"username": "operario1", "password": "Oper2026*"})
-    assert res_oper.status_code == 200
-    token_oper = res_oper.json()["access_token"]
-    headers_oper = {"Authorization": f"Bearer {token_oper}"}
 
-    # 3. Operario intenta crear celda individual -> Debe fallar con 403 Forbidden
-    res_forb = client.post("/api/v1/celdas/", json={"codigo": "C-99", "tipo_vehiculo": "CARRO", "ubicacion": "Nivel 2"}, headers=headers_oper)
-    assert res_forb.status_code == 403
+def test_admin_crea_cuenta_operativa():
+    seed_initial_data()
+    ACTIVE_SESSIONS.clear()
+    with TestClient(app) as client:
+        headers = login(client)
+        suffix = uuid4().hex[:8]
+        response = client.post(
+            "/api/v1/auth/cuentas",
+            headers=headers,
+            json={
+                "documento": f"90{suffix}",
+                "nombres": "Usuario",
+                "apellidos": "De Prueba",
+                "username": f"operador_{suffix}",
+                "password": "ClavePrueba2026",
+                "rol": "OPERARIO",
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["rol"] == "OPERARIO"
 
-    # 4. Administrador crea celda individual C-71 -> Debe responder 201 Created
-    res_celda = client.post("/api/v1/celdas/", json={"codigo": "C-71", "tipo_vehiculo": "CARRO", "ubicacion": "Nivel 2"}, headers=headers_admin)
-    assert res_celda.status_code in (200, 201, 409)
 
-    # 5. Administrador modifica estado de celda individual a MANTENIMIENTO
-    lista = client.get("/api/v1/celdas/", headers=headers_admin).json()["celdas"]
-    celda_71 = next((c for c in lista if c["codigo"] == "C-71"), None)
-    assert celda_71 is not None
-    res_patch = client.patch(f"/api/v1/celdas/{celda_71['celda_id']}", json={"estado": "MANTENIMIENTO"}, headers=headers_admin)
-    assert res_patch.status_code == 200
-    assert res_patch.json()["celda"]["estado"] == "MANTENIMIENTO"
+def test_admin_crea_y_actualiza_celda_individual():
+    seed_initial_data()
+    ACTIVE_SESSIONS.clear()
+    with TestClient(app) as client:
+        headers = login(client)
+        code = f"QA-{uuid4().hex[:8].upper()}"
+        created = client.post(
+            "/api/v1/celdas/",
+            headers=headers,
+            json={
+                "codigo": code,
+                "tipo_vehiculo": "CARRO",
+                "ubicacion": "Zona de pruebas",
+            },
+        )
+        assert created.status_code == 201
+
+        cell = next(
+            item for item in client.get(
+                "/api/v1/celdas/", headers=headers
+            ).json()["celdas"] if item["codigo"] == code
+        )
+        updated = client.patch(
+            f"/api/v1/celdas/{cell['celda_id']}",
+            headers=headers,
+            json={"estado": "MANTENIMIENTO"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["celda"]["estado"] == "MANTENIMIENTO"
+
+
+def test_operario_no_puede_crear_celdas():
+    seed_initial_data()
+    ACTIVE_SESSIONS.clear()
+    with TestClient(app) as client:
+        headers = login(client, "operario1", "Oper2026*")
+        response = client.post(
+            "/api/v1/celdas/",
+            headers=headers,
+            json={
+                "codigo": f"NO-{uuid4().hex[:8]}",
+                "tipo_vehiculo": "CARRO",
+                "ubicacion": "Zona de pruebas",
+            },
+        )
+        assert response.status_code == 403
