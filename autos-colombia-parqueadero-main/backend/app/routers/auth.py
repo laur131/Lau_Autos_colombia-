@@ -250,7 +250,7 @@ def crear_cuenta_operativa(
 
     db.add(nuevo)
     db.commit()
-    db.refresh(nuevo) 
+    db.refresh(nuevo)
 
     return {
         "mensaje": "Cuenta creada exitosamente",
