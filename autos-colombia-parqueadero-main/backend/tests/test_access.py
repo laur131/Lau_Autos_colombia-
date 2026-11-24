@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.main import app, seed_initial_data
@@ -67,7 +69,7 @@ def test_historial_solo_permite_admin_y_operario():
 
     db = SessionLocal()
     try:
-        documento = "TIT" + __import__("uuid").uuid4().hex[:8]
+        documento = "TIT" + uuid4().hex[:8]
         titular = Usuario(
             documento=documento,
             nombres="Titular",
