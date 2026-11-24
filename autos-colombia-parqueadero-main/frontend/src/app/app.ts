@@ -9,7 +9,7 @@ import {
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-type View = 'ingreso' | 'salida' | 'historial';
+type View = 'ingreso' | 'salida' | 'historial' | 'cuentas' | 'celdas';
 
 interface Usuario {
   usuario_id: number;
@@ -23,6 +23,20 @@ interface LoginResponse {
   access_token: string;
   token_type: string;
   usuario: Usuario;
+}
+
+interface ManagedUser extends Usuario {
+  documento: string;
+  activo: number;
+}
+
+interface ParkingCell {
+  celda_id: number;
+  codigo: string;
+  tipo_vehiculo: string;
+  ubicacion: string;
+  estado: string;
+  activa: number;
 }
 
 interface Count {
@@ -71,6 +85,19 @@ export class App implements OnInit {
   view: View = 'ingreso';
 
   occupancy: Occupancy | null = null;
+  managedUsers: ManagedUser[] = [];
+  parkingCells: ParkingCell[] = [];
+
+  accountDocument = '';
+  accountNames = '';
+  accountLastNames = '';
+  accountUsername = '';
+  accountPassword = '';
+  accountRole = 'OPERARIO';
+
+  cellCode = '';
+  cellType = 'CARRO';
+  cellLocation = 'Zona General';
   movements: Movement[] = [];
   filteredMovements: Movement[] = [];
 
@@ -92,6 +119,10 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     // El usuario debe iniciar sesión para acceder al sistema.
+  }
+
+  get isAdmin(): boolean {
+    return this.currentUser?.rol === 'ADMIN';
   }
 
   private get headers(): HttpHeaders {
@@ -122,6 +153,7 @@ export class App implements OnInit {
         this.message = `Bienvenido, ${response.usuario.nombres}.`;
 
         this.refresh();
+        if (this.isAdmin) this.loadAdminData();
       },
       error: error => {
         this.busy = false;
@@ -151,6 +183,8 @@ export class App implements OnInit {
     this.occupancy = null;
     this.movements = [];
     this.filteredMovements = [];
+    this.managedUsers = [];
+    this.parkingCells = [];
     this.openMovement = null;
     this.entryPlate = '';
     this.exitPlate = '';
@@ -162,9 +196,8 @@ export class App implements OnInit {
     this.view = view;
     this.message = '';
 
-    if (view === 'historial') {
-      this.loadHistory();
-    }
+    if (view === 'historial') this.loadHistory();
+    if (view === 'cuentas' || view === 'celdas') this.loadAdminData();
   }
 
   refresh(): void {
@@ -178,6 +211,110 @@ export class App implements OnInit {
     ).subscribe({
       next: response => {
         this.occupancy = response.resumen_aforo;
+      },
+      error: error => this.showError(error)
+    });
+  }
+
+  loadAdminData(): void {
+    if (!this.token || !this.isAdmin) return;
+
+    this.http.get<ManagedUser[]>(`${API}/gestion/usuarios`, {
+      headers: this.headers
+    }).subscribe({
+      next: users => this.managedUsers = users,
+      error: error => this.showError(error)
+    });
+
+    this.http.get<any>(`${API}/celdas/`, {
+      headers: this.headers
+    }).subscribe({
+      next: response => this.parkingCells = response.celdas ?? [],
+      error: error => this.showError(error)
+    });
+  }
+
+  createAccount(): void {
+    if (!this.token || !this.isAdmin || this.busy) return;
+    this.busy = true;
+    this.http.post(`${API}/auth/cuentas`, {
+      documento: this.accountDocument.trim(),
+      nombres: this.accountNames.trim(),
+      apellidos: this.accountLastNames.trim(),
+      username: this.accountUsername.trim(),
+      password: this.accountPassword,
+      rol: this.accountRole
+    }, { headers: this.headers }).subscribe({
+      next: () => {
+        this.busy = false;
+        this.messageType = 'success';
+        this.message = 'Cuenta creada correctamente.';
+        this.accountDocument = '';
+        this.accountNames = '';
+        this.accountLastNames = '';
+        this.accountUsername = '';
+        this.accountPassword = '';
+        this.accountRole = 'OPERARIO';
+        this.loadAdminData();
+      },
+      error: error => {
+        this.busy = false;
+        this.showError(error);
+      }
+    });
+  }
+
+  toggleUser(user: ManagedUser): void {
+    if (!this.token || !this.isAdmin || this.busy) return;
+    const nextState = user.activo === 1 ? 0 : 1;
+    const params = new HttpParams().set('activo', String(nextState));
+    this.http.patch(`${API}/gestion/usuarios/${user.usuario_id}/estado`, null, {
+      headers: this.headers,
+      params
+    }).subscribe({
+      next: () => {
+        this.messageType = 'success';
+        this.message = 'Estado de la cuenta actualizado.';
+        this.loadAdminData();
+      },
+      error: error => this.showError(error)
+    });
+  }
+
+  createCell(): void {
+    if (!this.token || !this.isAdmin || this.busy) return;
+    this.busy = true;
+    this.http.post(`${API}/celdas/`, {
+      codigo: this.cellCode.trim().toUpperCase(),
+      tipo_vehiculo: this.cellType,
+      ubicacion: this.cellLocation.trim()
+    }, { headers: this.headers }).subscribe({
+      next: () => {
+        this.busy = false;
+        this.messageType = 'success';
+        this.message = 'Celda individual creada correctamente.';
+        this.cellCode = '';
+        this.loadAdminData();
+        this.refresh();
+      },
+      error: error => {
+        this.busy = false;
+        this.showError(error);
+      }
+    });
+  }
+
+  toggleCellMaintenance(cell: ParkingCell): void {
+    if (!this.token || !this.isAdmin || this.busy) return;
+    const nextState = cell.estado === 'MANTENIMIENTO' ? 'DISPONIBLE' : 'MANTENIMIENTO';
+    this.http.patch(`${API}/celdas/${cell.celda_id}`, {
+      estado: nextState
+    }, { headers: this.headers }).subscribe({
+      next: () => {
+        this.messageType = 'success';
+        this.message = `Celda ${cell.codigo}: estado actualizado.`;
+        this.loadAdminData();
+        this.refresh();
       },
       error: error => this.showError(error)
     });
