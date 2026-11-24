@@ -25,7 +25,8 @@ interface LoginResponse {
   usuario: Usuario;
 }
 
-interface ManagedUser extends Usuario {
+interface ManagedUser extends Omit<Usuario, 'username'> {
+  username: string | null;
   documento: string;
   activo: number;
 }
