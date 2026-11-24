@@ -1,81 +1,72 @@
-from datetime import date, timedelta
-
-import pytest
 from fastapi.testclient import TestClient
 
-from app.main import connect, create_app, plus_one_month
+from app.main import app, seed_initial_data
+from app.routers.auth import ACTIVE_SESSIONS
 
 
-@pytest.fixture
-def client(tmp_path):
-    app = create_app(tmp_path / "test.sqlite3")
-    with TestClient(app) as test_client:
-        yield test_client
-
-
-def test_health_and_capacity_are_separated(client):
-    assert client.get("/api/v1/health").json()["status"] == "ok"
-    capacity = client.get("/api/v1/ocupacion").json()
-    assert capacity["CARRO"] == {"ocupados": 0, "capacidad": 70, "disponibles": 70}
-    assert capacity["MOTOCICLETA"] == {"ocupados": 0, "capacidad": 10, "disponibles": 10}
-
-
-def test_unregistered_vehicle_is_rejected(client):
-    response = client.post("/api/v1/movimientos/ingresos", json={"placa": "NO-REG-1"})
-    assert response.status_code == 409
-    assert response.json()["detail"]["codigo"] == "VEHICULO_NO_REGISTRADO"
-    assert client.get("/api/v1/ocupacion").json()["CARRO"]["ocupados"] == 0
-
-
-def test_registered_vehicle_can_enter_and_exit(client):
-    entry = client.post("/api/v1/movimientos/ingresos", json={"placa": "abc 123", "observacion": "Espejo revisado"})
-    assert entry.status_code == 201
-    movement = entry.json()
-    assert movement["placa"] == "ABC123"
-    assert movement["estado"] == "ABIERTO"
-    assert client.get("/api/v1/ocupacion").json()["CARRO"]["ocupados"] == 1
-    exit_response = client.post(
-        f"/api/v1/movimientos/{movement['movimiento_id']}/salida",
-        json={"observacion": "Salida normal"},
+def obtener_token(client, username, password):
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": username, "password": password},
     )
-    assert exit_response.status_code == 200
-    assert exit_response.json()["estado"] == "CERRADO"
-    assert client.get("/api/v1/ocupacion").json()["CARRO"]["disponibles"] == 70
+    assert response.status_code == 200
+    return response.json()["access_token"]
 
 
-def test_duplicate_open_entry_is_rejected(client):
-    assert client.post("/api/v1/movimientos/ingresos", json={"placa": "ABC123"}).status_code == 201
-    response = client.post("/api/v1/movimientos/ingresos", json={"placa": "ABC123"})
-    assert response.status_code == 409
-    assert response.json()["detail"]["codigo"] == "INGRESO_DUPLICADO"
+def test_rutas_protegidas_requieren_autenticacion():
+    seed_initial_data()
+    with TestClient(app) as client:
+        response = client.get("/api/v1/celdas/")
+        assert response.status_code == 401
 
 
-def test_expired_membership_is_rejected(client):
-    response = client.post("/api/v1/movimientos/ingresos", json={"placa": "CAR999"})
-    assert response.status_code == 409
-    assert response.json()["detail"]["codigo"] == "MENSUALIDAD_VENCIDA"
+def test_login_admin_y_operario():
+    seed_initial_data()
+    ACTIVE_SESSIONS.clear()
+    with TestClient(app) as client:
+        admin_token = obtener_token(client, "admin", "Admin2026*")
+        operario_token = obtener_token(client, "operario1", "Oper2026*")
+
+        assert admin_token
+        assert operario_token
+        assert admin_token != operario_token
 
 
-def test_category_capacity_limit_is_enforced(client):
-    db_path = client.app.state.db_path
-    tomorrow = (date.today() + timedelta(days=60)).isoformat()
-    with connect(db_path) as conn:
-        for i in range(1, 71):
-            conn.execute(
-                "INSERT INTO vehiculo(placa,tipo,titular,fecha_vencimiento) VALUES(?,?,?,?)",
-                (f"T{i:05d}", "CARRO", "Prueba", tomorrow),
-            )
-        conn.execute(
-            """INSERT INTO movimiento(vehiculo_id,operario_id,fecha_hora_entrada)
-               SELECT vehiculo_id,1,? FROM vehiculo WHERE placa LIKE 'T%'""",
-            ("2026-01-01T08:00:00-05:00",),
+def test_operario_no_puede_administrar_celdas():
+    seed_initial_data()
+    ACTIVE_SESSIONS.clear()
+    with TestClient(app) as client:
+        token = obtener_token(client, "operario1", "Oper2026*")
+        response = client.post(
+            "/api/v1/celdas/",
+            json={
+                "codigo": "PRUEBA-OPERARIO",
+                "tipo_vehiculo": "CARRO",
+                "ubicacion": "Zona de pruebas",
+            },
+            headers={"Authorization": f"Bearer {token}"},
         )
-    response = client.post("/api/v1/movimientos/ingresos", json={"placa": "ABC123"})
-    assert response.status_code == 409
-    assert response.json()["detail"]["codigo"] == "CUPO_COMPLETO"
+        assert response.status_code == 403
 
 
-def test_anniversary_clamps_at_month_end():
-    assert plus_one_month(date(2026, 1, 31)) == date(2026, 2, 28)
-    assert plus_one_month(date(2028, 1, 31)) == date(2028, 2, 29)
-    assert plus_one_month(date(2026, 10, 10)) == date(2026, 11, 10)
+def test_login_rechaza_credenciales_incorrectas():
+    seed_initial_data()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "clave-incorrecta"},
+        )
+        assert response.status_code == 401
+
+
+def test_historial_requiere_rol_operativo():
+    seed_initial_data()
+    ACTIVE_SESSIONS.clear()
+    with TestClient(app) as client:
+        token = obtener_token(client, "admin", "Admin2026*")
+        response = client.get(
+            "/api/v1/movimientos/historial",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
