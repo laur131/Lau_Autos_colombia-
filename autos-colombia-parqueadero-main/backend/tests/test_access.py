@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 
 from app.main import app, seed_initial_data
+from app.database import SessionLocal
+from app.models import Usuario
 from app.routers.auth import ACTIVE_SESSIONS
 
 
@@ -59,14 +61,45 @@ def test_login_rechaza_credenciales_incorrectas():
         assert response.status_code == 401
 
 
-def test_historial_requiere_rol_operativo():
+def test_historial_solo_permite_admin_y_operario():
     seed_initial_data()
     ACTIVE_SESSIONS.clear()
+
+    db = SessionLocal()
+    try:
+        documento = "TIT" + __import__("uuid").uuid4().hex[:8]
+        titular = Usuario(
+            documento=documento,
+            nombres="Titular",
+            apellidos="De Prueba",
+            username=None,
+            password_hash=None,
+            rol="TITULAR",
+            activo=1,
+        )
+        db.add(titular)
+        db.commit()
+        db.refresh(titular)
+        titular_id = titular.usuario_id
+    finally:
+        db.close()
+
+    token_titular = "token-titular-prueba"
+    ACTIVE_SESSIONS[token_titular] = titular_id
+
     with TestClient(app) as client:
-        token = obtener_token(client, "admin", "Admin2026*")
         response = client.get(
             "/api/v1/movimientos/historial",
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token_titular}"},
         )
-        assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        assert response.status_code == 403
+
+        token_admin = obtener_token(client, "admin", "Admin2026*")
+        admin_response = client.get(
+            "/api/v1/movimientos/historial",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        assert admin_response.status_code == 200
+        assert isinstance(admin_response.json(), list)
+
+    ACTIVE_SESSIONS.pop(token_titular, None)
