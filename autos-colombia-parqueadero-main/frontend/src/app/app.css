@@ -143,3 +143,13 @@ header .user button {
     font-size: 9px;
   }
 }
+
+
+/* Administración de cuentas y celdas */
+.admin-form{max-width:none!important;margin-bottom:22px}
+.admin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.subheading{font-size:13px;color:#234b61;margin:22px 0 10px}
+.helper{font-size:10px;color:#718794;margin-top:10px}
+.small-action{padding:7px 9px;font-size:9px;white-space:nowrap}
+@media(max-width:950px){.admin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.admin-grid{grid-template-columns:1fr}.admin-form{padding:12px!important}}
