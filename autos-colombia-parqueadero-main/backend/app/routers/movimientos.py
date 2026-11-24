@@ -240,6 +240,10 @@ def consultar_historial(
     db: Session = Depends(get_db),
     user: Usuario = Depends(get_current_user)
 ):
+    # El historial contiene información operativa y solo debe estar
+    # disponible para administradores y operarios autenticados.
+    validar_operario(user)
+
     movimientos = db.query(Movimiento).order_by(
         Movimiento.movimiento_id.desc()
     ).all()
