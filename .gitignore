@@ -221,3 +221,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Base de datos local de SQLite (se crea al arrancar el backend)
+autos-colombia-parqueadero-main/backend/data/
