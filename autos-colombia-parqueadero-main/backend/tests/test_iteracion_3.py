@@ -1,5 +1,6 @@
-"""Pruebas de la Iteración 3: gestión de pagos (casos CP-P01 a CP-P12)."""
+"""Pruebas de la Iteración 3: gestión de pagos (casos CP-P01 a CP-P15 del plan de pruebas)."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from random import randint
 from uuid import uuid4
@@ -204,7 +205,7 @@ def test_cp_p09_dia_del_vencimiento_bloquea_ingreso():
         assert ingreso.status_code == 409
 
 
-def test_cp_p10_estado_por_vencer():
+def test_estado_por_vencer():
     preparar()
     with TestClient(app) as client:
         admin = login(client)
@@ -217,7 +218,7 @@ def test_cp_p10_estado_por_vencer():
         assert estado["valor_a_pagar"] == 250000
 
 
-def test_cp_p11_anulacion_solo_admin_y_ultimo_pago():
+def test_cp_p10_p11_p12_anulacion_solo_admin_y_ultimo_pago():
     preparar()
     with TestClient(app) as client:
         admin = login(client)
@@ -271,7 +272,7 @@ def test_cp_p11_anulacion_solo_admin_y_ultimo_pago():
         assert [p["pago_id"] for p in historial] == [segundo["pago_id"]]
 
 
-def test_cp_p12_reportes_solo_admin():
+def test_cp_p14_p15_reportes_solo_admin():
     preparar()
     with TestClient(app) as client:
         admin = login(client)
@@ -292,3 +293,17 @@ def test_cp_p12_reportes_solo_admin():
 
         assert client.get("/api/v1/reportes/recaudo", headers=operario).status_code == 403
         assert client.get("/api/v1/reportes/mora", headers=operario).status_code == 403
+
+
+def test_cp_p13_consecutivo_unico_con_pagos_simultaneos():
+    preparar()
+    with TestClient(app) as client:
+        admin = login(client)
+        placas = [crear_vehiculo(client, admin, tipo="MOTOCICLETA")[0] for _ in range(6)]
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            respuestas = list(pool.map(lambda placa: pagar(client, admin, placa), placas))
+
+        assert all(r.status_code == 201 for r in respuestas)
+        numeros = [r.json()["comprobante"]["numero_comprobante"] for r in respuestas]
+        assert len(set(numeros)) == len(numeros)
