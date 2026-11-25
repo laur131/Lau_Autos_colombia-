@@ -1,12 +1,13 @@
 
-from datetime import datetime, date
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Movimiento, Vehiculo, Mensualidad, Usuario, Celda
+from ..models import Movimiento, Vehiculo, Usuario, Celda
 from .auth import get_current_user
+from .pagos import hoy_bogota, mensualidad_vigente
 
 
 router = APIRouter(
@@ -70,38 +71,13 @@ def registrar_ingreso(
             detail="Titular inactivo: acceso denegado"
         )
 
-    # Verificar que exista una mensualidad vigente
-    hoy = date.today()
-
-    mensualidad = db.query(Mensualidad).filter(
-        Mensualidad.vehiculo_id == vehiculo.vehiculo_id
-    ).order_by(
-        Mensualidad.mensualidad_id.desc()
-    ).first()
-
-    if not mensualidad:
+    # Verificar que la mensualidad esté vigente. La vigencia sale de las
+    # mensualidades no anuladas, que se renuevan al registrar un pago.
+    # El día del vencimiento el ingreso ya se rechaza.
+    if not mensualidad_vigente(db, vehiculo.vehiculo_id, hoy_bogota()):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="El vehículo no tiene una mensualidad registrada"
-        )
-
-    try:
-        fecha_inicio = date.fromisoformat(mensualidad.fecha_inicio)
-        fecha_fin = date.fromisoformat(mensualidad.fecha_fin)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Las fechas de la mensualidad no son válidas"
-        )
-
-    if (
-        mensualidad.estado_vigencia != "ACTIVO"
-        or hoy < fecha_inicio
-        or hoy > fecha_fin
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="La mensualidad no se encuentra vigente"
+            detail="Mensualidad vencida: registre el pago para autorizar el ingreso"
         )
 
     # Evitar que un vehículo tenga dos ingresos abiertos
