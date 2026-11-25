@@ -50,3 +50,26 @@ class Movimiento(Base):
     fecha_hora_salida = Column(String, nullable=True)
     observacion_entrada = Column(String, default="")
     observacion_salida = Column(String, default="")
+
+class Tarifa(Base):
+    __tablename__ = "tarifa"
+    tipo_vehiculo = Column(String, primary_key=True)  # CARRO, MOTOCICLETA
+    valor = Column(Integer, nullable=False)  # pesos colombianos, sin decimales
+
+class Pago(Base):
+    __tablename__ = "pago"
+    pago_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    numero_comprobante = Column(String, unique=True, nullable=True)  # AC-000001
+    vehiculo_id = Column(Integer, ForeignKey("vehiculo.vehiculo_id"), nullable=False)
+    mensualidad_id = Column(Integer, ForeignKey("mensualidad.mensualidad_id"), nullable=True)
+    operario_id = Column(Integer, ForeignKey("usuario.usuario_id"), nullable=False)
+    valor = Column(Integer, nullable=False)
+    metodo = Column(String, nullable=False)  # EFECTIVO, TRANSFERENCIA, TARJETA
+    referencia = Column(String, nullable=True)
+    fecha_hora = Column(String, nullable=False)
+    periodo_inicio = Column(String, nullable=False)
+    periodo_fin = Column(String, nullable=False)
+    estado = Column(String, default="REGISTRADO")  # REGISTRADO, ANULADO
+    anulado_por_id = Column(Integer, ForeignKey("usuario.usuario_id"), nullable=True)
+    fecha_anulacion = Column(String, nullable=True)
+    motivo_anulacion = Column(String, nullable=True)
