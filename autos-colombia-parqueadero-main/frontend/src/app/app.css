@@ -153,3 +153,41 @@ header .user button {
 .small-action{padding:7px 9px;font-size:9px;white-space:nowrap}
 @media(max-width:950px){.admin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.admin-grid{grid-template-columns:1fr}.admin-form{padding:12px!important}}
+
+/* Gestión de pagos (Iteración 3) */
+.pay-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}
+.pay-card{border:1px solid #d7e3ea;border-radius:10px;padding:16px;background:#fbfdfe;max-width:none!important}
+.pay-card h3{margin:0 0 10px;color:#163a50;font-size:16px}
+.pay-card p{margin:6px 0;font-size:13px;color:#33505f}
+.pay-card label{display:block;margin-top:8px}
+.readonly{background:#eef3f6!important;font-weight:bold}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:bold;background:#e6edf1;color:#33505f}
+.pill.ok{background:#dff3e6;color:#1d6b3a}
+.pill.warn{background:#fff1d6;color:#8a5a00}
+.pill.bad{background:#fde2e1;color:#a12a22}
+.receipt{border:1px dashed #9db3c0;border-radius:10px;padding:18px;margin-top:18px;background:#fff;max-width:520px;position:relative}
+.receipt header{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #d7e3ea;padding-bottom:10px;margin-bottom:10px}
+.receipt header small{display:block;color:#718794;font-size:11px}
+.receipt-number{text-align:right;font-size:11px;color:#718794}
+.receipt-number b{display:block;font-size:18px;color:#163a50}
+.receipt dl{display:grid;grid-template-columns:130px 1fr;gap:6px 10px;margin:0;font-size:13px}
+.receipt dt{color:#718794}
+.receipt dd{margin:0;color:#163a50}
+.receipt .total{font-size:18px;font-weight:bold}
+.void-mark{position:absolute;top:42%;left:0;right:0;text-align:center;font-size:44px;font-weight:bold;color:rgba(161,42,34,.25);transform:rotate(-14deg);margin:0;pointer-events:none}
+.pay-filters{grid-template-columns:repeat(6,minmax(0,1fr))}
+.void-box{border:1px solid #f2b8b4;background:#fff6f5;border-radius:10px;padding:14px;margin:12px 0;max-width:none!important}
+.danger{background:#a12a22!important;border-color:#a12a22!important}
+tr.voided td{color:#98a8b2;text-decoration:line-through}
+tr.voided td:last-child,tr.voided td:nth-child(7){text-decoration:none}
+.void-info{display:block;font-size:10px;color:#a12a22}
+.report-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.report-grid .metric p{margin:4px 0}
+b.inline{font-size:13px;display:inline}
+@media (max-width:800px){.pay-grid,.report-grid{grid-template-columns:1fr}.pay-filters{grid-template-columns:1fr 1fr}}
+@media print{
+  body *{visibility:hidden}
+  #comprobante,#comprobante *{visibility:visible}
+  #comprobante{position:absolute;left:0;top:0;border:none}
+  .no-print{display:none!important}
+}

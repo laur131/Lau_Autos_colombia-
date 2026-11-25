@@ -6,10 +6,11 @@ import {
   HttpHeaders,
   HttpParams
 } from '@angular/common/http';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { apiResponded } from './refresh-view.interceptor';
 
-type View = 'ingreso' | 'salida' | 'historial' | 'cuentas' | 'celdas';
+type View = 'ingreso' | 'salida' | 'historial' | 'cuentas' | 'celdas' | 'pagos' | 'historial-pagos' | 'reportes';
 
 interface Usuario {
   usuario_id: number;
@@ -64,6 +65,59 @@ interface Movement {
   estado: 'ABIERTO' | 'CERRADO';
 }
 
+interface Payment {
+  pago_id: number;
+  numero_comprobante: string;
+  placa: string;
+  tipo_vehiculo: string;
+  titular: string;
+  valor: number;
+  metodo: string;
+  referencia: string | null;
+  fecha_hora: string;
+  periodo_inicio: string;
+  periodo_fin: string;
+  operario: string;
+  estado: 'REGISTRADO' | 'ANULADO';
+  anulado_por: string | null;
+  fecha_anulacion: string | null;
+  motivo_anulacion: string | null;
+}
+
+interface MonthlyStatus {
+  placa: string;
+  tipo_vehiculo: string;
+  vehiculo_activo: boolean;
+  titular: string | null;
+  titular_activo: boolean;
+  estado: 'VIGENTE' | 'POR_VENCER' | 'VENCIDA' | 'SIN_MENSUALIDAD';
+  fecha_vencimiento: string | null;
+  dias_restantes: number | null;
+  ultimo_pago: Payment | null;
+  valor_a_pagar: number;
+  periodo_propuesto: { inicio: string; fin: string };
+}
+
+interface Collection {
+  desde: string;
+  hasta: string;
+  total_recaudado: number;
+  pagos_registrados: number;
+  pagos_anulados: number;
+  valor_anulado: number;
+  por_metodo: Record<string, number>;
+  por_tipo_vehiculo: Record<string, number>;
+}
+
+interface Overdue {
+  placa: string;
+  tipo_vehiculo: string;
+  titular: string;
+  estado: string;
+  fecha_vencimiento: string | null;
+  dias_restantes: number | null;
+}
+
 const API = 'http://127.0.0.1:8000/api/v1';
 
 @Component({
@@ -76,6 +130,12 @@ const API = 'http://127.0.0.1:8000/api/v1';
 export class App implements OnInit {
 
   private readonly http = inject(HttpClient);
+  private readonly cdr = inject(ChangeDetectorRef);
+
+  constructor() {
+    // Redibuja la vista cada vez que la API responde (ver refresh-view.interceptor.ts)
+    apiResponded.subscribe(() => this.cdr.markForCheck());
+  }
 
   token: string | null = null;
   currentUser: Usuario | null = null;
@@ -113,6 +173,27 @@ export class App implements OnInit {
   fromDate = '';
   toDate = '';
   historyState = '';
+
+  // Gestión de pagos (Iteración 3)
+  paymentPlate = '';
+  paymentMethod = 'EFECTIVO';
+  paymentReference = '';
+  monthlyStatus: MonthlyStatus | null = null;
+  receipt: Payment | null = null;
+
+  payments: Payment[] = [];
+  paymentFilterPlate = '';
+  paymentFrom = '';
+  paymentTo = '';
+  paymentFilterMethod = '';
+  paymentFilterState = '';
+  voidingPayment: Payment | null = null;
+  voidReason = '';
+
+  reportFrom = '';
+  reportTo = '';
+  collection: Collection | null = null;
+  overdue: Overdue[] = [];
 
   busy = false;
   message = '';
@@ -187,6 +268,12 @@ export class App implements OnInit {
     this.managedUsers = [];
     this.parkingCells = [];
     this.openMovement = null;
+    this.monthlyStatus = null;
+    this.receipt = null;
+    this.payments = [];
+    this.collection = null;
+    this.overdue = [];
+    this.paymentPlate = '';
     this.entryPlate = '';
     this.exitPlate = '';
     this.message = '';
@@ -199,6 +286,165 @@ export class App implements OnInit {
 
     if (view === 'historial') this.loadHistory();
     if (view === 'cuentas' || view === 'celdas') this.loadAdminData();
+    if (view === 'historial-pagos') this.loadPayments();
+    if (view === 'reportes') this.loadReports();
+  }
+
+  // ---------------- Gestión de pagos ----------------
+
+  findMonthly(): void {
+    const plate = this.paymentPlate.trim().toUpperCase();
+    if (!this.token || !plate) return;
+
+    this.receipt = null;
+    this.message = '';
+
+    this.http.get<MonthlyStatus>(
+      `${API}/pagos/mensualidad/${encodeURIComponent(plate)}`,
+      { headers: this.headers }
+    ).subscribe({
+      next: status => this.monthlyStatus = status,
+      error: error => {
+        this.monthlyStatus = null;
+        this.showError(error);
+      }
+    });
+  }
+
+  registerPayment(): void {
+    if (!this.token || !this.monthlyStatus || this.busy) return;
+
+    this.busy = true;
+    this.message = '';
+
+    this.http.post<{ mensaje: string; comprobante: Payment }>(
+      `${API}/pagos`,
+      {
+        placa: this.monthlyStatus.placa,
+        metodo: this.paymentMethod,
+        referencia: this.paymentMethod === 'EFECTIVO' ? null : this.paymentReference.trim()
+      },
+      { headers: this.headers }
+    ).subscribe({
+      next: response => {
+        this.busy = false;
+        this.receipt = response.comprobante;
+        this.messageType = 'success';
+        this.message = `${response.mensaje}. Comprobante ${response.comprobante.numero_comprobante}.`;
+        this.paymentReference = '';
+        this.findMonthlyKeepingReceipt();
+      },
+      error: error => {
+        this.busy = false;
+        this.showError(error);
+      }
+    });
+  }
+
+  private findMonthlyKeepingReceipt(): void {
+    if (!this.monthlyStatus) return;
+    this.http.get<MonthlyStatus>(
+      `${API}/pagos/mensualidad/${encodeURIComponent(this.monthlyStatus.placa)}`,
+      { headers: this.headers }
+    ).subscribe({ next: status => this.monthlyStatus = status });
+  }
+
+  showReceipt(payment: Payment): void {
+    this.receipt = payment;
+  }
+
+  printReceipt(): void {
+    window.print();
+  }
+
+  loadPayments(): void {
+    if (!this.token) return;
+
+    let params = new HttpParams();
+    if (this.paymentFilterPlate.trim()) params = params.set('placa', this.paymentFilterPlate.trim().toUpperCase());
+    if (this.paymentFrom) params = params.set('desde', this.paymentFrom);
+    if (this.paymentTo) params = params.set('hasta', this.paymentTo);
+    if (this.paymentFilterMethod) params = params.set('metodo', this.paymentFilterMethod);
+    if (this.paymentFilterState) params = params.set('estado', this.paymentFilterState);
+
+    this.http.get<Payment[]>(`${API}/pagos`, { headers: this.headers, params }).subscribe({
+      next: payments => this.payments = payments,
+      error: error => this.showError(error)
+    });
+  }
+
+  startVoid(payment: Payment): void {
+    this.voidingPayment = payment;
+    this.voidReason = '';
+  }
+
+  confirmVoid(): void {
+    if (!this.token || !this.voidingPayment || this.busy) return;
+
+    this.busy = true;
+
+    this.http.post<{ mensaje: string }>(
+      `${API}/pagos/${this.voidingPayment.pago_id}/anulacion`,
+      { motivo: this.voidReason.trim() },
+      { headers: this.headers }
+    ).subscribe({
+      next: response => {
+        this.busy = false;
+        this.messageType = 'success';
+        this.message = response.mensaje;
+        this.voidingPayment = null;
+        this.loadPayments();
+      },
+      error: error => {
+        this.busy = false;
+        this.showError(error);
+      }
+    });
+  }
+
+  loadReports(): void {
+    if (!this.token || !this.isAdmin) return;
+
+    let params = new HttpParams();
+    if (this.reportFrom) params = params.set('desde', this.reportFrom);
+    if (this.reportTo) params = params.set('hasta', this.reportTo);
+
+    this.http.get<Collection>(`${API}/reportes/recaudo`, { headers: this.headers, params }).subscribe({
+      next: collection => {
+        this.collection = collection;
+        this.reportFrom = collection.desde;
+        this.reportTo = collection.hasta;
+      },
+      error: error => this.showError(error)
+    });
+
+    this.http.get<Overdue[]>(`${API}/reportes/mora`, { headers: this.headers }).subscribe({
+      next: rows => this.overdue = rows,
+      error: error => this.showError(error)
+    });
+  }
+
+  money(value: number | null | undefined): string {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      maximumFractionDigits: 0
+    }).format(value ?? 0);
+  }
+
+  day(value: string | null): string {
+    if (!value) return '—';
+    const [y, m, d] = value.substring(0, 10).split('-').map(Number);
+    return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(y, m - 1, d));
+  }
+
+  statusLabel(status: string): string {
+    return ({
+      VIGENTE: 'Vigente',
+      POR_VENCER: 'Por vencer',
+      VENCIDA: 'Vencida',
+      SIN_MENSUALIDAD: 'Sin mensualidad'
+    } as Record<string, string>)[status] ?? status;
   }
 
   refresh(): void {
