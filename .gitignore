@@ -224,3 +224,7 @@ __marimo__/
 
 # Base de datos local de SQLite (se crea al arrancar el backend)
 autos-colombia-parqueadero-main/backend/data/
+
+# Dependencias y caché del frontend
+node_modules/
+.angular/
