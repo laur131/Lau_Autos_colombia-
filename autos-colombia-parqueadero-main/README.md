@@ -31,6 +31,28 @@ Prototipo académico desarrollado con Angular, Python, FastAPI, SQLAlchemy y SQL
 - Historial de movimientos para administradores y operarios.
 - Resumen de aforo separado para carros y motocicletas.
 
+### Gestión de pagos (Iteración 3)
+- Tarifas de la mensualidad por tipo de vehículo: carro $250.000 y moto $100.000.
+- Registro del pago por placa con método EFECTIVO, TRANSFERENCIA o TARJETA; transferencia y tarjeta exigen número de referencia.
+- El valor sale de la tarifa y no se puede editar. El periodo empieza hoy si la mensualidad está vencida, o en la fecha de vencimiento si todavía está vigente (pago adelantado). Termina el mismo día del mes siguiente (o el último día del mes si ese día no existe).
+- Cada pago genera un comprobante con consecutivo único (AC-000001) que se puede imprimir o guardar en PDF desde el navegador.
+- Estado de la mensualidad por placa: vigente, por vencer (5 días o menos) o vencida.
+- El ingreso se rechaza si la mensualidad está vencida; el día del vencimiento ya no se permite el ingreso.
+- Historial de pagos con filtros por placa, fechas, método y estado.
+- Anulación solo por el administrador, con motivo obligatorio y únicamente sobre el último pago del vehículo; el pago queda ANULADO (no se borra) y la vigencia se recalcula.
+- Reportes para el administrador: recaudo por rango de fechas, método y tipo de vehículo, y lista de vehículos en mora o por vencer.
+
+### Datos de demostración
+Al arrancar con la base vacía se crean las cuentas `admin` / `Admin2026*` y `operario1` / `Oper2026*`, 70 celdas de carro, 10 de moto, las tarifas y tres vehículos:
+
+| Placa | Tipo | Estado de la mensualidad |
+|---|---|---|
+| ABC123 | Carro | Vencida (para mostrar el pago) |
+| DEF456 | Carro | Por vencer (3 días) |
+| MOT12A | Moto | Vigente |
+
+Para empezar de cero, detén el backend y borra la carpeta `backend/data`.
+
 ## Requisitos
 - Python 3.10 o superior.
 - Node.js y npm compatibles con la versión de Angular definida en frontend/package.json.
@@ -61,9 +83,9 @@ Interfaz: http://localhost:4200
 ### 3. Pruebas
 ```powershell
 cd backend
-pytest -q
+pytest -q tests
 ```
-Las pruebas usan los endpoints actuales de la API. La aplicación de demostración utiliza SQLite local; para pruebas repetibles y aisladas se recomienda configurar una base temporal específica para el entorno de pruebas.
+`tests/test_iteracion_3.py` cubre los casos del plan de pruebas de pagos (CP-P01 a CP-P12). Las pruebas usan los endpoints actuales de la API. La aplicación de demostración utiliza SQLite local; para pruebas repetibles y aisladas se recomienda configurar una base temporal específica para el entorno de pruebas.
 
 ## Credenciales iniciales de demostración
 - Administrador: admin / Admin2026*
